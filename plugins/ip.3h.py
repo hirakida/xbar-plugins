@@ -1,33 +1,43 @@
 #!/usr/bin/env python3
 
 import json
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Optional
+
+URL = "http://ip-api.com/json"
 
 
 def main():
-    url = "http://ip-api.com/json"
+    content = fetch_data()
+    if content:
+        print(content["query"])
+        print("---")
+        print(f"as: {content['as']}")
+        print(f"isp: {content['isp']}")
+        print(f"org: {content['org']}")
+        print("---")
+        print(f"city: {content['city']}")
+        print(f"region: {content['regionName']}")
+        print(f"country: {content['country']}")
+        print(f"timezone: {content['timezone']}")
+        print(f"zip: {content['zip']}")
+        print(f"lat: {content['lat']}")
+        print(f"lon: {content['lon']}")
+        print("---")
+
+
+def fetch_data() -> Optional[dict]:
     try:
-        with urllib.request.urlopen(url) as response:
-            content = json.loads(response.read().decode("utf8"))
-            print(content["query"])
-            print("---")
-            print("as: {0}".format(content["as"]))
-            print("isp: {0}".format(content["isp"]))
-            print("org: {0}".format(content["org"]))
-            print("---")
-            print("city: {0}".format(content["city"]))
-            print("region: {0}".format(content["regionName"]))
-            print("country: {0}".format(content["country"]))
-            print("timezone: {0}".format(content["timezone"]))
-            print("zip: {0}".format(content["zip"]))
-            print("lat: {0}".format(content["lat"]))
-            print("lon: {0}".format(content["lon"]))
-            print("---")
-    except urllib.error.URLError:
-        pass
+        with urllib.request.urlopen(URL) as response:
+            data = response.read().decode("utf-8")
+            return json.loads(data)
+    except urllib.error.URLError as e:
+        print(f"Failed to fetch {URL}. {e}", file=sys.stderr)
+        return None
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

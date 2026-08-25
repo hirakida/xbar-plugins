@@ -9,16 +9,9 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Optional
 
-AREA_CODE = 400000
-REGION_AREA_CODE = 400010
-CITY_AREA_CODE = 82182
-API_URL = f"https://www.jma.go.jp/bosai/forecast/data/forecast/{AREA_CODE}.json"
-WEB_URL = f"https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code={AREA_CODE}"
-ICON_URL = "https://www.jma.go.jp/bosai/forecast/img/{icon_name}"
-CACHE_FILE = "/tmp/xbar_{icon_name}"
-
-TELOPS = '''
+TELOPS = """
 {
     "100": [
         "100.svg",
@@ -847,52 +840,71 @@ TELOPS = '''
         "SNOW AND THUNDER"
     ]
 }
-'''
+"""
+
+AREA_CODE = 400000
+REGION_AREA_CODE = 400010
+CITY_AREA_CODE = 82182
+API_URL = f"https://www.jma.go.jp/bosai/forecast/data/forecast/{AREA_CODE}.json"
+WEB_URL = f"https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code={AREA_CODE}"
+ICON_URL = "https://www.jma.go.jp/bosai/forecast/img/{icon_name}"
+CACHE_FILE = "/tmp/xbar_{icon_name}"
 
 
 def main():
-    jst = datetime.timezone(datetime.timedelta(hours=+9), "JST")
-    now = datetime.datetime.now(jst)
-    req = urllib.request.Request(API_URL)
-    try:
-        with urllib.request.urlopen(req) as response:
-            content = json.loads(response.read().decode("utf-8"))
-            time_series = content[0]["timeSeries"]
-            time_defines0 = time_series[0]["timeDefines"]
-            time_defines2 = time_series[2]["timeDefines"]
-            areas0 = time_series[0]["areas"]
-            areas2 = time_series[2]["areas"]
+    content = fetch_weather()
+    if content:
+        jst = datetime.timezone(datetime.timedelta(hours=+9), "JST")
+        now = datetime.datetime.now(jst)
+        time_series = content[0]["timeSeries"]
+        time_defines0 = time_series[0]["timeDefines"]
+        time_defines2 = time_series[2]["timeDefines"]
+        areas0 = time_series[0]["areas"]
+        areas2 = time_series[2]["areas"]
 
-            times0 = [datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S%z") for time in time_defines0]
-            temps = {}
-            for area2 in areas2:
-                if area2["area"]["code"] == str(CITY_AREA_CODE):
-                    for time, temp in zip(time_defines2, area2["temps"]):
-                        temp_time = datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S%z")
-                        temps[temp_time] = temp
+        times0 = [datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S%z") for time in time_defines0]
+        temps = {}
+        for area2 in areas2:
+            if area2["area"]["code"] == str(CITY_AREA_CODE):
+                for time, temp in zip(time_defines2, area2["temps"]):
+                    temp_time = datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S%z")
+                    temps[temp_time] = temp
 
-            for area0 in areas0:
-                if area0["area"]["code"] == str(REGION_AREA_CODE):
-                    for index0, (time0, weather_code) in enumerate(zip(times0, area0["weatherCodes"])):
-                        icon = get_base64_icon(weather_code)
-                        if index0 == 0:
-                            print(f" | image={icon} dropdown=false")
-                            print("---")
-                        print(time0.date())
-                        print(f" | image={icon}")
-
-                        for key, value in temps.items():
-                            if key.date() == time0.date():
-                                if key.time() == datetime.time(0, 0):
-                                    if key > now:
-                                        print(f"Min: {value} | color=blue")
-                                else:
-                                    print(f"Max: {value} | color=red")
+        for area0 in areas0:
+            if area0["area"]["code"] == str(REGION_AREA_CODE):
+                for index0, (time0, weather_code, weather) in enumerate(
+                        zip(times0, area0["weatherCodes"], area0["weathers"])):
+                    if index0 == 0:
+                        print(get_text(weather_code))
                         print("---")
-    except urllib.error.URLError:
-        pass
+                    print(time0.date())
+                    print(weather)
+
+                    for key, value in temps.items():
+                        if key.date() == time0.date():
+                            if key.time() == datetime.time(0, 0):
+                                if key > now:
+                                    print(f"Min: {value} | color=blue")
+                            else:
+                                print(f"Max: {value} | color=red")
+                    print("---")
 
     print(f"Website... | href={WEB_URL}")
+
+
+def fetch_weather() -> Optional[dict]:
+    try:
+        with urllib.request.urlopen(API_URL) as response:
+            data = response.read().decode("utf-8")
+            return json.loads(data)
+    except urllib.error.URLError as e:
+        print(f"Failed to fetch {API_URL}. {e}", file=sys.stderr)
+        return None
+
+
+def get_text(weather_code: str) -> str:
+    telops = json.loads(TELOPS)
+    return telops[weather_code][3]
 
 
 def get_base64_icon(weather_code: str) -> str:
@@ -905,7 +917,7 @@ def get_base64_icon(weather_code: str) -> str:
         try:
             urllib.request.urlretrieve(icon_url, cache_path)
         except urllib.error.URLError as e:
-            print(f"Failed to retrieve {url}. {e}", file=sys.stderr)
+            print(f"Failed to retrieve {icon_url}. {e}", file=sys.stderr)
             return ""
 
     try:
@@ -916,5 +928,5 @@ def get_base64_icon(weather_code: str) -> str:
         return ""
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
