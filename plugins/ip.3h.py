@@ -7,7 +7,17 @@ import urllib.parse
 import urllib.request
 from typing import Optional
 
-URL = "http://ip-api.com/json"
+API_URL = "http://ip-api.com/json"
+
+
+def fetch_data() -> Optional[dict]:
+    try:
+        with urllib.request.urlopen(API_URL) as response:
+            data = response.read().decode("utf-8")
+            return json.loads(data)
+    except urllib.error.URLError as e:
+        print(f"Failed to fetch {API_URL}. {e}", file=sys.stderr)
+        return None
 
 
 def main():
@@ -27,16 +37,6 @@ def main():
         print(f"lat: {content['lat']}")
         print(f"lon: {content['lon']}")
         print("---")
-
-
-def fetch_data() -> Optional[dict]:
-    try:
-        with urllib.request.urlopen(URL) as response:
-            data = response.read().decode("utf-8")
-            return json.loads(data)
-    except urllib.error.URLError as e:
-        print(f"Failed to fetch {URL}. {e}", file=sys.stderr)
-        return None
 
 
 if __name__ == "__main__":
