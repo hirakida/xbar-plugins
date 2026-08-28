@@ -4,12 +4,12 @@
 #  <xbar.version>v1.0</xbar.version>
 #  <xbar.author>hirakida</xbar.author>
 #  <xbar.author.github>hirakida</xbar.author.github>
-#  <xbar.desc>GitHub notifications list.</xbar.desc>
+#  <xbar.desc>Displays GitHub notifications.</xbar.desc>
 #  <xbar.image>https://avatars.githubusercontent.com/u/12070156</xbar.image>
 #  <xbar.dependencies>python</xbar.dependencies>
 #  <xbar.abouturl>https://github.com/hirakida/xbar-plugins</xbar.abouturl>
-#  <xbar.var>string(GITHUB_API_TOKEN=""): GitHub personal access token(classic).</xbar.var>
-#  <xbar.var>boolean(GITHUB_NOTIFICATIONS_ALL=false): If true, show notifications marked as read.</xbar.var>
+#  <xbar.var>string(VAR_GITHUB_TOKEN=""): GitHub personal access token(classic).</xbar.var>
+#  <xbar.var>boolean(VAR_NOTIFICATIONS_ALL=false): If true, show notifications marked as read.</xbar.var>
 
 import json
 import os
@@ -24,11 +24,12 @@ WEB_URL = "https://github.com/notifications"
 
 
 def fetch_data() -> Optional[dict]:
-    token = os.environ["GITHUB_API_TOKEN"]
-    include_all = os.environ["GITHUB_NOTIFICATIONS_ALL"]
+    token = os.environ["VAR_GITHUB_TOKEN"]
+    include_all = os.environ["VAR_NOTIFICATIONS_ALL"]
+    url = API_URL.format(all=include_all)
 
     request = urllib.request.Request(
-        API_URL.format(all=include_all),
+        url,
         headers={
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
@@ -40,7 +41,7 @@ def fetch_data() -> Optional[dict]:
         with urllib.request.urlopen(request) as response:
             return json.loads(response.read())
     except urllib.error.URLError as e:
-        print(f"Failed to fetch {API_URL}. {e}", file=sys.stderr)
+        print(f"Failed to fetch {url}. {e}", file=sys.stderr)
         return None
 
 
