@@ -944,8 +944,9 @@ def main():
                     for pop_datetime, pop in pops.items():
                         if pop_datetime.date() == weather_datetime.date():
                             pop_list.append(f"{pop_datetime.hour:02d}h({pop}%)")
-                    pop_text = " ,".join(pop_list)
-                    print(f"PoP: {pop_text}")
+                    if pop_list:
+                        pop_text = " ,".join(pop_list)
+                        print(f"PoP: {pop_text}")
 
                     for temp_datetime, temp in temps.items():
                         if temp_datetime.date() == weather_datetime.date():
