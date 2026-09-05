@@ -11,39 +11,56 @@
 
 import json
 import sys
-import urllib.error
-import urllib.parse
 import urllib.request
 from typing import Optional
 
 API_URL = "http://ip-api.com/json"
 
 
+def validate_data(data: object) -> dict:
+    if not isinstance(data, dict):
+        raise ValueError("IP response must be a JSON object")
+
+    if data.get("status") != "success":
+        raise ValueError(data.get("message", "IP lookup failed"))
+
+    if not isinstance(data.get("query"), str) or not data["query"]:
+        raise ValueError("IP response is missing query")
+
+    return data
+
+
 def fetch_data() -> Optional[dict]:
     try:
-        with urllib.request.urlopen(API_URL) as response:
-            return json.loads(response.read())
-    except urllib.error.URLError as e:
+        with urllib.request.urlopen(API_URL, timeout=5) as response:
+            return validate_data(json.loads(response.read()))
+    except Exception as e:
         print(f"Failed to fetch {API_URL}. {e}", file=sys.stderr)
         return None
 
 
-def main():
-    content = fetch_data()
-    if content:
-        print(content["query"])
+def main() -> None:
+    data = fetch_data()
+    if data:
+        print(data["query"])
         print("---")
-        print(f"country: {content['country']}")
-        print(f"region: {content['regionName']}")
-        print(f"city: {content['city']}")
-        print(f"zip: {content['zip']}")
-        print(f"lat: {content['lat']}")
-        print(f"lon: {content['lon']}")
-        print(f"timezone: {content['timezone']}")
-        print(f"isp: {content['isp']}")
-        print(f"org: {content['org']}")
-        print(f"as: {content['as']}")
-        print("---")
+
+        fields = (
+            "country",
+            "regionName",
+            "city",
+            "zip",
+            "lat",
+            "lon",
+            "timezone",
+            "isp",
+            "org",
+            "as",
+        )
+        for key in fields:
+            value = data.get(key)
+            if value is not None and value != "":
+                print(f"{key}: {value}")
 
 
 if __name__ == "__main__":

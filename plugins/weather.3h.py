@@ -17,8 +17,6 @@ import datetime
 import json
 import os
 import sys
-import urllib.error
-import urllib.parse
 import urllib.request
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -863,9 +861,9 @@ CACHE_FILE = "/tmp/xbar_{icon_name}"
 def fetch_data(area_code: str) -> Optional[dict]:
     url = API_URL.format(area_code=area_code)
     try:
-        with urllib.request.urlopen(url) as response:
+        with urllib.request.urlopen(url, timeout=5) as response:
             return json.loads(response.read())
-    except urllib.error.URLError as e:
+    except Exception as e:
         print(f"Failed to fetch {url}. {e}", file=sys.stderr)
         return None
 
@@ -888,7 +886,7 @@ def get_base64_icon(weather_code: str) -> Optional[str]:
     if not os.path.exists(cache_path):
         try:
             urllib.request.urlretrieve(icon_url, cache_path)
-        except urllib.error.URLError as e:
+        except Exception as e:
             print(f"Failed to retrieve {icon_url}. {e}", file=sys.stderr)
             return None
 
@@ -900,7 +898,7 @@ def get_base64_icon(weather_code: str) -> Optional[str]:
         return None
 
 
-def main():
+def main() -> None:
     area_code = os.environ["VAR_AREA_CODE"]
     region_area_code = os.environ["VAR_REGION_AREA_CODE"]
     city_area_code = os.environ["VAR_CITY_AREA_CODE"]

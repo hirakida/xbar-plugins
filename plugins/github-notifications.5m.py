@@ -14,19 +14,24 @@
 import json
 import os
 import sys
-import urllib.error
-import urllib.parse
 import urllib.request
-from typing import Optional
+from typing import Any, Optional
+from urllib.parse import urlsplit
 
-API_URL = "https://api.github.com/notifications?all={all}"
-WEB_URL = "https://github.com/notifications"
+API_NOTIFICATIONS_URL = "https://api.github.com/notifications?all={all}"
+API_REPOSITORY_URL = "https://api.github.com/repos/"
+WEB_URL = "https://github.com/"
+WEB_NOTIFICATIONS_URL = "https://github.com/notifications"
 
 
-def fetch_data() -> Optional[dict]:
-    token = os.environ["VAR_GITHUB_TOKEN"]
-    include_all = os.environ["VAR_NOTIFICATIONS_ALL"]
-    url = API_URL.format(all=include_all)
+def fetch_data() -> Optional[list[dict[str, Any]]]:
+    token = os.environ.get("VAR_GITHUB_TOKEN", "").strip()
+    if not token:
+        print("VAR_GITHUB_TOKEN is not configured.", file=sys.stderr)
+        return None
+    include_all = os.environ.get("VAR_NOTIFICATIONS_ALL", "false")
+
+    url = API_NOTIFICATIONS_URL.format(all=include_all)
 
     request = urllib.request.Request(
         url,
@@ -38,38 +43,53 @@ def fetch_data() -> Optional[dict]:
         }
     )
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request, timeout=5) as response:
             return json.loads(response.read())
-    except urllib.error.URLError as e:
+    except Exception as e:
         print(f"Failed to fetch {url}. {e}", file=sys.stderr)
         return None
 
 
-def get_web_url(notification: dict) -> str:
+def api_url_to_web_url(url: str, is_pull_request: bool = False) -> str:
+    """Convert a GitHub API repository URL into its browser URL."""
+    if not url.startswith(API_REPOSITORY_URL):
+        return url
+
+    parsed_url = urlsplit(url)
+    api_base_url = urlsplit(API_REPOSITORY_URL)
+    repository_path = parsed_url.path[len(api_base_url.path) - 1:]
+    path = (
+        repository_path.replace("/pulls/", "/pull/", 1)
+        if is_pull_request
+        else repository_path
+    )
+    web_base_url = urlsplit(WEB_URL)
+    return parsed_url._replace(
+        scheme=web_base_url.scheme,
+        netloc=web_base_url.netloc,
+        path=path,
+    ).geturl()
+
+
+def get_web_url(notification: dict[str, Any]) -> str:
     subject = notification["subject"]
     subject_type = subject["type"]
-    url = subject["url"]
-
-    if subject_type == "PullRequest":
-        return url.replace(
-            "https://api.github.com/repos/",
-            "https://github.com/",
-        ).replace("/pulls/", "/pull/")
-
-    if subject_type in ("Issue", "Discussion"):
-        return url.replace(
-            "https://api.github.com/repos/",
-            "https://github.com/",
-        )
+    repository_url = notification["repository"]["html_url"]
 
     if subject_type == "Release":
-        html_url = notification["repository"]["html_url"]
-        return f"{html_url}/releases"
+        return f"{repository_url}/releases"
 
-    return url
+    subject_url = subject.get("url")
+    if not subject_url:
+        return repository_url
+
+    return api_url_to_web_url(
+        subject_url,
+        is_pull_request=(subject_type == "PullRequest"),
+    )
 
 
-def main():
+def main() -> None:
     notifications = fetch_data()
     if notifications is not None:
         print(f"GitHub: {len(notifications)}")
@@ -82,7 +102,7 @@ def main():
             url = get_web_url(notification)
             print(f"[{subject_type}] {full_name} {title} | href={url}")
         print("---")
-    print(f"Web UI... | href={WEB_URL}")
+    print(f"Web UI... | href={WEB_NOTIFICATIONS_URL}")
 
 
 if __name__ == "__main__":
