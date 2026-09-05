@@ -14,8 +14,6 @@
 import json
 import os
 import sys
-import urllib.error
-import urllib.parse
 import urllib.request
 from typing import Optional
 
@@ -38,9 +36,9 @@ def fetch_data() -> Optional[dict]:
         }
     )
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request, timeout=5) as response:
             return json.loads(response.read())
-    except urllib.error.URLError as e:
+    except Exception as e:
         print(f"Failed to fetch {url}. {e}", file=sys.stderr)
         return None
 
@@ -69,7 +67,7 @@ def get_web_url(notification: dict) -> str:
     return url
 
 
-def main():
+def main() -> None:
     notifications = fetch_data()
     if notifications is not None:
         print(f"GitHub: {len(notifications)}")
