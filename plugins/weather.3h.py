@@ -12,7 +12,6 @@
 #  <xbar.var>string(VAR_REGION_AREA_CODE="400010"): The region area code.</xbar.var>
 #  <xbar.var>string(VAR_CITY_AREA_CODE="82182"): The city area code.</xbar.var>
 
-import base64
 import datetime
 import json
 import os
@@ -21,6 +20,7 @@ import urllib.request
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+# Copied Forecast.Const.TELOPS from https://www.jma.go.jp/bosai/forecast/.
 TELOPS = """
 {
     "100": [
@@ -851,14 +851,17 @@ TELOPS = """
     ]
 }
 """
+TELOPS_DATA = json.loads(TELOPS)
 
 API_URL = "https://www.jma.go.jp/bosai/forecast/data/forecast/{area_code}.json"
 WEB_URL = "https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code={area_code}"
-ICON_URL = "https://www.jma.go.jp/bosai/forecast/img/{icon_name}"
-CACHE_FILE = "/tmp/xbar_{icon_name}"
+DEFAULT_AREA_CODE = "400000"
+DEFAULT_REGION_AREA_CODE = "400010"
+DEFAULT_CITY_AREA_CODE = "82182"
+JST = ZoneInfo("Asia/Tokyo")
 
 
-def fetch_data(area_code: str) -> Optional[dict]:
+def fetch_data(area_code: str) -> Optional[list[dict]]:
     url = API_URL.format(area_code=area_code)
     try:
         with urllib.request.urlopen(url, timeout=5) as response:
@@ -873,87 +876,76 @@ def convert_to_datetime(time: str) -> datetime.datetime:
 
 
 def get_weather_text(weather_code: str) -> str:
-    telops = json.loads(TELOPS)
-    return telops[weather_code][3]
+    return TELOPS_DATA[weather_code][3]
 
 
-def get_base64_icon(weather_code: str) -> Optional[str]:
-    telops = json.loads(TELOPS)
-    icon_name = telops[weather_code][0]
-    icon_url = ICON_URL.format(icon_name=icon_name)
-    cache_path = CACHE_FILE.format(icon_name=icon_name)
+def get_time_values(series: dict, area_code: str, value_key: str) -> dict:
+    values = {}
+    for area in series["areas"]:
+        if area["area"]["code"] != area_code:
+            continue
 
-    if not os.path.exists(cache_path):
-        try:
-            urllib.request.urlretrieve(icon_url, cache_path)
-        except Exception as e:
-            print(f"Failed to retrieve {icon_url}. {e}", file=sys.stderr)
-            return None
+        for time_define, value in zip(series["timeDefines"], area[value_key]):
+            values[convert_to_datetime(time_define)] = value
+    return values
 
-    try:
-        with open(cache_path, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
-    except OSError as e:
-        print(f"Failed to open {cache_path}. {e}", file=sys.stderr)
-        return None
+
+def print_forecast(content: list[dict], region_area_code: str, city_area_code: str) -> None:
+    now = datetime.datetime.now(JST)
+    time_series = content[0]["timeSeries"]
+    weather_series = time_series[0]
+    pop_series = time_series[1]
+    temp_series = time_series[2]
+    pops = get_time_values(pop_series, region_area_code, "pops")
+    temps = get_time_values(temp_series, city_area_code, "temps")
+
+    for weather_area in weather_series["areas"]:
+        if weather_area["area"]["code"] != region_area_code:
+            continue
+
+        for index, (time_define, weather_code, weather) in enumerate(
+                zip(
+                    weather_series["timeDefines"],
+                    weather_area["weatherCodes"],
+                    weather_area["weathers"],
+                )):
+            if index == 0:
+                print(get_weather_text(weather_code))
+                print("---")
+
+            weather_datetime = convert_to_datetime(time_define)
+            print(weather_datetime.date())
+            print(weather)
+
+            # PoP
+            pop_list = [
+                f"{pop_datetime.strftime('%H:%M')}({pop}%)"
+                for pop_datetime, pop in pops.items()
+                if pop_datetime.date() == weather_datetime.date()
+            ]
+            if pop_list:
+                print(f"PoP: {', '.join(pop_list)}")
+
+            # Temperature
+            for temp_datetime, temp in temps.items():
+                if temp_datetime.date() != weather_datetime.date():
+                    continue
+
+                if temp_datetime.time() == datetime.time(0, 0):
+                    if temp_datetime > now:
+                        print(f"Min: {temp}℃ | color=blue")
+                else:
+                    print(f"Max: {temp}℃ | color=red")
+            print("---")
 
 
 def main() -> None:
-    area_code = os.environ["VAR_AREA_CODE"]
-    region_area_code = os.environ["VAR_REGION_AREA_CODE"]
-    city_area_code = os.environ["VAR_CITY_AREA_CODE"]
-
+    area_code = os.environ.get("VAR_AREA_CODE", DEFAULT_AREA_CODE)
+    region_area_code = os.environ.get("VAR_REGION_AREA_CODE", DEFAULT_REGION_AREA_CODE)
+    city_area_code = os.environ.get("VAR_CITY_AREA_CODE", DEFAULT_CITY_AREA_CODE)
     content = fetch_data(area_code)
     if content:
-        now = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
-        time_series = content[0]["timeSeries"]
-        weather_series = time_series[0]
-        pop_series = time_series[1]
-        temp_series = time_series[2]
-
-        # key=datetime, value=pop
-        pops = {}
-        for pop_area in pop_series["areas"]:
-            if pop_area["area"]["code"] == region_area_code:
-                for time_define, pop in zip(pop_series["timeDefines"], pop_area["pops"]):
-                    pop_datetime = convert_to_datetime(time_define)
-                    pops[pop_datetime] = pop
-
-        # key=datetime, value=temp
-        temps = {}
-        for temp_area in temp_series["areas"]:
-            if temp_area["area"]["code"] == city_area_code:
-                for time_define, temp in zip(temp_series["timeDefines"], temp_area["temps"]):
-                    temp_datetime = convert_to_datetime(time_define)
-                    temps[temp_datetime] = temp
-
-        for weather_area in weather_series["areas"]:
-            if weather_area["area"]["code"] == region_area_code:
-                for index, (time_define, weather_code, weather) in enumerate(
-                        zip(weather_series["timeDefines"], weather_area["weatherCodes"], weather_area["weathers"])):
-                    if index == 0:
-                        print(get_weather_text(weather_code))
-                        print("---")
-                    weather_datetime = convert_to_datetime(time_define)
-                    print(weather_datetime.date())
-                    print(weather)
-
-                    pop_list = []
-                    for pop_datetime, pop in pops.items():
-                        if pop_datetime.date() == weather_datetime.date():
-                            pop_list.append(f"{pop_datetime.strftime('%H:%M')}({pop}%)")
-                    if pop_list:
-                        pop_text = ", ".join(pop_list)
-                        print(f"PoP: {pop_text}")
-
-                    for temp_datetime, temp in temps.items():
-                        if temp_datetime.date() == weather_datetime.date():
-                            if temp_datetime.time() == datetime.time(0, 0):
-                                if temp_datetime > now:
-                                    print(f"Min: {temp}℃ | color=blue")
-                            else:
-                                print(f"Max: {temp}℃ | color=red")
-                    print("---")
+        print_forecast(content, region_area_code, city_area_code)
 
     web_url = WEB_URL.format(area_code=area_code)
     print(f"Website... | href={web_url}")
