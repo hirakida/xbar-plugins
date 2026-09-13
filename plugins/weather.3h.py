@@ -18,7 +18,6 @@ import os
 import sys
 import urllib.request
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 # Copied Forecast.Const.TELOPS from https://www.jma.go.jp/bosai/forecast/.
 TELOPS = """
@@ -858,7 +857,6 @@ WEB_URL = "https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code={ar
 DEFAULT_AREA_CODE = "400000"
 DEFAULT_REGION_AREA_CODE = "400010"
 DEFAULT_CITY_AREA_CODE = "82182"
-JST = ZoneInfo("Asia/Tokyo")
 
 
 def fetch_data(area_code: str) -> Optional[list[dict]]:
@@ -891,7 +889,6 @@ def get_time_values(series: dict, area_code: str, value_key: str) -> dict:
 
 
 def print_forecast(content: list[dict], region_area_code: str, city_area_code: str) -> None:
-    now = datetime.datetime.now(JST)
     time_series = content[0]["timeSeries"]
     weather_series = time_series[0]
     pop_series = time_series[1]
@@ -932,8 +929,7 @@ def print_forecast(content: list[dict], region_area_code: str, city_area_code: s
                     continue
 
                 if temp_datetime.time() == datetime.time(0, 0):
-                    if temp_datetime > now:
-                        print(f"Min: {temp}℃ | color=blue")
+                    print(f"Min: {temp}℃ | color=blue")
                 else:
                     print(f"Max: {temp}℃ | color=red")
             print("---")
